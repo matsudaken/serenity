@@ -15,10 +15,14 @@ namespace Kernel {
 static char s_cmd_line[1024];
 static constexpr StringView s_embedded_cmd_line = ""sv;
 static CommandLine* s_the;
+static bool s_cmd_line_was_truncated;
 
 UNMAP_AFTER_INIT void CommandLine::early_initialize(StringView cmd_line)
 {
-    (void)cmd_line.copy_characters_to_buffer(s_cmd_line, sizeof(s_cmd_line));
+    // NOTE: We can't complain about a truncated command line just yet, as panicking
+    //       this early in the boot process is not possible. CommandLine::initialize()
+    //       takes care of that once we're able to.
+    s_cmd_line_was_truncated = !cmd_line.copy_characters_to_buffer(s_cmd_line, sizeof(s_cmd_line));
 }
 
 bool CommandLine::was_initialized()
@@ -37,6 +41,8 @@ UNMAP_AFTER_INIT void CommandLine::initialize()
     VERIFY(!s_the);
     s_the = new CommandLine({ s_cmd_line, strlen(s_cmd_line) });
     dmesgln("Kernel Commandline: {}", kernel_command_line().string());
+    if (s_cmd_line_was_truncated)
+        PANIC("Kernel command line is longer than the maximum of {} characters", sizeof(s_cmd_line) - 1);
     // Validate the modes the user passed in.
     (void)s_the->panic_mode(Validate::Yes);
 }
